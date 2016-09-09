@@ -29,13 +29,6 @@ var (
 	}
 )
 
-const (
-	LibreOfficePath   = "/usr/lib/libreoffice/program/"
-	TempfilePrefix    = "dokky-file-"
-	TempPreviewPrefix = "dokky-file-%s-%d"
-	PreviewsDPI       = 75
-)
-
 func ProcessDocument(document *libreofficekit.Document, bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	var (
 		isBGRA     bool
@@ -124,6 +117,7 @@ func ProcessFile(fileUrl string, bot *tgbotapi.BotAPI, message *tgbotapi.Message
 	} else {
 		log.Println(fmt.Sprintf("[%s] Corrupt file.", message.Document.FileID))
 	}
+	SendReply(bot, message, "Done.")
 }
 
 func main() {
