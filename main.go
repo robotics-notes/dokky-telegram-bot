@@ -7,12 +7,13 @@ import (
 	"image"
 	"log"
 	"os"
+	"runtime"
 	"unsafe"
 )
 
 var (
-	Office             *libreofficekit.Office
-	Bot                *tgbotapi.BotAPI
+	OfficePoolSize     = runtime.NumCPU()
+	OfficePool         = make(chan *libreofficekit.Office, OfficePoolSize)
 	SupportedMimetypes = map[string]bool{
 		// Microsoft Office
 		"application/msword":                                                        true,
@@ -35,7 +36,7 @@ const (
 	PreviewsDPI       = 75
 )
 
-func ProcessDocument(document *libreofficekit.Document, message *tgbotapi.Message) {
+func ProcessDocument(document *libreofficekit.Document, bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	var (
 		isBGRA        bool
 		rectangles    []image.Rectangle
@@ -78,28 +79,28 @@ func ProcessDocument(document *libreofficekit.Document, message *tgbotapi.Messag
 		if isBGRA {
 			libreofficekit.BGRA(m.Pix)
 		}
-		CreateAndSendPNG(i, m, message)
+		CreateAndSendPNG(i, m, bot, message)
 	}
 }
 
-func ProcessFile(fileUrl string, message *tgbotapi.Message) {
-	SendReply(message, "Got it.\nIt may take a while, so please stand by.")
+func ProcessFile(fileUrl string, bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
+	SendReply(bot, message, "Got it.\nIt may take a while, so please stand by.")
 	log.Println(fmt.Sprintf("[%s] Received file from [%s]: ('%v', '%v', %v bytes).", message.Document.FileID, message.Chat.UserName, message.Document.FileName, message.Document.MimeType, message.Document.FileSize))
 	log.Println(fmt.Sprintf("[%s] Downloading file: `%s`.", message.Document.FileID, fileUrl))
 	n, tempFilePath := DownloadToTempFile(fileUrl)
 	log.Println(fmt.Sprintf("[%s] Saved as `%s`[%d].", message.Document.FileID, tempFilePath, n))
 	defer os.Remove(tempFilePath)
 	if n == message.Document.FileSize {
-		Office.Mutex.Lock()
+		office := <-OfficePool
 		log.Println(fmt.Sprintf("[%s] Locked LibreOfficeKit.", message.Document.FileID))
-		document, err := Office.LoadDocument(tempFilePath)
+		document, err := office.LoadDocument(tempFilePath)
 		log.Println(fmt.Sprintf("[%s] LibreOffice document type: [%d].", message.Document.FileID, document.GetType()))
 		defer document.Close()
 		if err == nil {
 			document.InitializeForRendering("")
-			ProcessDocument(document, message)
+			ProcessDocument(document, bot, message)
 		}
-		Office.Mutex.Unlock()
+		OfficePool <- office
 		log.Println(fmt.Sprintf("[%s] Unlocked LibreOfficeKit.", message.Document.FileID))
 	} else {
 		log.Println(fmt.Sprintf("[%s] Corrupt file.", message.Document.FileID))
@@ -108,24 +109,28 @@ func ProcessFile(fileUrl string, message *tgbotapi.Message) {
 
 func main() {
 	log.Println("Started.")
-	var err error
-	Office, err = libreofficekit.NewOffice(LibreOfficePath)
-	if err != nil {
-		log.Panic(err)
-	} else {
-		log.Println("Loaded LibreOfficeKit.")
-	}
-	defer Office.Close()
 
-	Bot, err = tgbotapi.NewBotAPI(os.Getenv("TELEGRAM_BOT_TOKEN"))
+	log.Println(fmt.Sprintf("LibreOfficeKit pool size: %d.", OfficePoolSize))
+	for i := 0; i < OfficePoolSize; i++ {
+		office, err := libreofficekit.NewOffice(LibreOfficePath)
+		if err != nil {
+			log.Panic(err)
+		} else {
+			OfficePool <- office
+			log.Println(fmt.Sprintf("Loaded LibreOfficeKit #%d.", i))
+		}
+
+	}
+
+	bot, err := tgbotapi.NewBotAPI(os.Getenv("TELEGRAM_BOT_TOKEN"))
 	if err != nil {
 		log.Panic(err)
 	}
-	log.Printf("Authorized on account %s.", Bot.Self.UserName)
+	log.Printf("Authorized on account %s.", bot.Self.UserName)
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
-	updates, err := Bot.GetUpdatesChan(u)
+	updates, err := bot.GetUpdatesChan(u)
 
 	for update := range updates {
 		if update.Message == nil {
@@ -140,18 +145,18 @@ func main() {
 				reply = "Please, send me only documents.\n" +
 					"I'm quite busy for all that friendy-chats."
 			}
-			SendReply(message, reply)
+			SendReply(bot, message, reply)
 		} else {
 			if SupportedMimetypes[message.Document.MimeType] {
 				if message.Document.FileSize > (1024 * 1024 * 20) {
-					SendReply(message, "Sorry, I can't download that document, due to Telegram limits (bots can't download files larger than 20 MB)")
+					SendReply(bot, message, "Sorry, I can't download that document, due to Telegram limits (bots can't download files larger than 20 MB)")
 				} else {
-					fileUrl, _ := Bot.GetFileDirectURL(message.Document.FileID)
-					ProcessFile(fileUrl, message)
+					fileUrl, _ := bot.GetFileDirectURL(message.Document.FileID)
+					go ProcessFile(fileUrl, bot, message)
 				}
 			} else {
 				log.Println(fmt.Sprintf("[%s] Unknown mimetype: [%s]", message.Document.FileID, message.Document.MimeType))
-				SendReply(message, "Sorry, I don't support this file type.")
+				SendReply(bot, message, "Sorry, I don't support this file type.")
 			}
 		}
 	}

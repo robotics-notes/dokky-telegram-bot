@@ -20,7 +20,7 @@ func DownloadToTempFile(fileUrl string) (int, string) {
 	return int(n), tempFile.Name()
 }
 
-func CreateAndSendPNG(page int, image *image.RGBA, message *tgbotapi.Message) {
+func CreateAndSendPNG(page int, image *image.RGBA, bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	tempPreviewFile, _ := ioutil.TempFile(os.TempDir(), fmt.Sprintf(TempPreviewPrefix, message.Document.FileID, page))
 	png.Encode(tempPreviewFile, image)
 	tempPreviewFile.Close()
@@ -29,12 +29,12 @@ func CreateAndSendPNG(page int, image *image.RGBA, message *tgbotapi.Message) {
 	msg := tgbotapi.NewPhotoUpload(message.Chat.ID, validPreviewFileName)
 	msg.ReplyToMessageID = message.MessageID
 	msg.Caption = fmt.Sprintf("Page #%d", page+1)
-	Bot.Send(msg)
+	bot.Send(msg)
 	os.Remove(validPreviewFileName)
 }
 
-func SendReply(message *tgbotapi.Message, reply string) {
+func SendReply(bot *tgbotapi.BotAPI, message *tgbotapi.Message, reply string) {
 	msg := tgbotapi.NewMessage(message.Chat.ID, reply)
 	msg.ReplyToMessageID = message.MessageID
-	Bot.Send(msg)
+	bot.Send(msg)
 }
