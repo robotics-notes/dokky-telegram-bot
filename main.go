@@ -38,10 +38,9 @@ const (
 
 func ProcessDocument(document *libreofficekit.Document, bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
 	var (
-		isBGRA        bool
-		rectangles    []image.Rectangle
-		partsCount    int
-		width, height int
+		isBGRA     bool
+		rectangles []image.Rectangle
+		partsCount int
 	)
 	if document.GetTileMode() == libreofficekit.BGRATilemode {
 		isBGRA = true
@@ -54,31 +53,49 @@ func ProcessDocument(document *libreofficekit.Document, bot *tgbotapi.BotAPI, me
 	if documentType == libreofficekit.TextDocument {
 		rectangles = document.GetPartPageRectangles()
 		partsCount = len(rectangles)
-		width, height = rectangles[0].Dx(), rectangles[0].Dy()
 	} else {
 		parts := document.GetParts()
 		partsCount = parts
-		width, height = document.GetSize()
 	}
 
-	canvasWidth := libreofficekit.TwipsToPixels(width, PreviewsDPI)
-	canvasHeight := libreofficekit.TwipsToPixels(height, PreviewsDPI)
-
-	m := image.NewRGBA(image.Rect(0, 0, canvasWidth, canvasHeight))
-	pixels := unsafe.Pointer(&m.Pix[0])
-
 	for i := 0; i < partsCount; i++ {
+		var (
+			width      int
+			height     int
+			tilePosX   int
+			tilePosY   int
+			tileWidth  int
+			tileHeight int
+		)
 		if documentType == libreofficekit.TextDocument {
 			rectangle := rectangles[i]
-			document.PaintTile(pixels, canvasWidth, canvasHeight, rectangle.Min.X, rectangle.Min.Y, rectangle.Dx(), rectangle.Dy())
+			width, height = rectangle.Dx(), rectangle.Dy()
+			tilePosX = rectangle.Min.X
+			tilePosY = rectangle.Min.Y
+			tileWidth = rectangle.Dx()
+			tileHeight = rectangle.Dy()
 		} else {
 			document.SetPart(i)
-			document.PaintTile(pixels, canvasWidth, canvasHeight, 0, 0, width, height)
+			width, height = document.GetSize()
+			tilePosX = 0
+			tilePosY = 0
+			tileWidth = width
+			tileHeight = height
 		}
+		canvasWidth := libreofficekit.TwipsToPixels(width, PreviewsDPI)
+		canvasHeight := libreofficekit.TwipsToPixels(height, PreviewsDPI)
+
+		m := image.NewRGBA(image.Rect(0, 0, canvasWidth, canvasHeight))
+		pixels := unsafe.Pointer(&m.Pix[0])
+
+		document.PaintTile(pixels, canvasWidth, canvasHeight, tilePosX, tilePosY, tileWidth, tileHeight)
+
 		log.Println(fmt.Sprintf("[%s] Rendered page #%d", message.Document.FileID, i))
+
 		if isBGRA {
 			libreofficekit.BGRA(m.Pix)
 		}
+
 		CreateAndSendPNG(i, m, bot, message)
 	}
 }
@@ -92,6 +109,7 @@ func ProcessFile(fileUrl string, bot *tgbotapi.BotAPI, message *tgbotapi.Message
 	defer os.Remove(tempFilePath)
 	if n == message.Document.FileSize {
 		office := <-OfficePool
+		office.Mutex.Lock()
 		log.Println(fmt.Sprintf("[%s] Locked LibreOfficeKit.", message.Document.FileID))
 		document, err := office.LoadDocument(tempFilePath)
 		log.Println(fmt.Sprintf("[%s] LibreOffice document type: [%d].", message.Document.FileID, document.GetType()))
@@ -100,6 +118,7 @@ func ProcessFile(fileUrl string, bot *tgbotapi.BotAPI, message *tgbotapi.Message
 			document.InitializeForRendering("")
 			ProcessDocument(document, bot, message)
 		}
+		office.Mutex.Unlock()
 		OfficePool <- office
 		log.Println(fmt.Sprintf("[%s] Unlocked LibreOfficeKit.", message.Document.FileID))
 	} else {
@@ -117,7 +136,7 @@ func main() {
 			log.Panic(err)
 		} else {
 			OfficePool <- office
-			log.Println(fmt.Sprintf("Loaded LibreOfficeKit #%d.", i))
+			log.Println(fmt.Sprintf("Loaded LibreOfficeKit #%d.", i+1))
 		}
 
 	}
