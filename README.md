@@ -3,8 +3,7 @@
 ![dokky-telegram-bot](http://i.imgur.com/8KhIOmW.png)
 
 # Install
-
-First , follow install instructions for [go-libreofficekit](https://github.com/docsbox/go-libreofficekit), then just type it in your terminal:
+First, follow install instructions for [go-libreofficekit](https://github.com/docsbox/go-libreofficekit), then type this into your terminal:
 
 ```bash
 $ go get github.com/docsbox/dokky-telegram-bot
