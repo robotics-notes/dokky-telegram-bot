@@ -5,11 +5,7 @@ import (
 	"github.com/docsbox/go-libreofficekit"
 	"gopkg.in/telegram-bot-api.v4"
 	"image"
-	"image/png"
-	"io"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"unsafe"
 )
@@ -38,28 +34,6 @@ const (
 	TempPreviewPrefix = "dokky-file-%s-%d"
 	PreviewsDPI       = 75
 )
-
-func DownloadToTempFile(fileUrl string) (int, string) {
-	tempFile, _ := ioutil.TempFile(os.TempDir(), fmt.Sprintf(TempfilePrefix))
-	response, _ := http.Get(fileUrl)
-	n, _ := io.Copy(tempFile, response.Body)
-	defer response.Body.Close()
-	defer tempFile.Close()
-	return int(n), tempFile.Name()
-}
-
-func CreateAndSendPNG(page int, image *image.RGBA, message *tgbotapi.Message) {
-	tempPreviewFile, _ := ioutil.TempFile(os.TempDir(), fmt.Sprintf(TempPreviewPrefix, message.Document.FileID, page))
-	png.Encode(tempPreviewFile, image)
-	tempPreviewFile.Close()
-	validPreviewFileName := fmt.Sprintf("%s_%d.png", tempPreviewFile.Name(), page+1)
-	os.Rename(tempPreviewFile.Name(), validPreviewFileName)
-	msg := tgbotapi.NewPhotoUpload(message.Chat.ID, validPreviewFileName)
-	msg.ReplyToMessageID = message.MessageID
-	msg.Caption = fmt.Sprintf("Page #%d", page+1)
-	Bot.Send(msg)
-	os.Remove(validPreviewFileName)
-}
 
 func ProcessDocument(document *libreofficekit.Document, message *tgbotapi.Message) {
 	var (
@@ -109,9 +83,7 @@ func ProcessDocument(document *libreofficekit.Document, message *tgbotapi.Messag
 }
 
 func ProcessFile(fileUrl string, message *tgbotapi.Message) {
-	msg := tgbotapi.NewMessage(message.Chat.ID, "Got it.\nIt may take a while, so please stand by.")
-	msg.ReplyToMessageID = message.MessageID
-	Bot.Send(msg)
+	SendReply(message, "Got it.\nIt may take a while, so please stand by.")
 	log.Println(fmt.Sprintf("[%s] Received file from [%s]: ('%v', '%v', %v bytes).", message.Document.FileID, message.Chat.UserName, message.Document.FileName, message.Document.MimeType, message.Document.FileSize))
 	log.Println(fmt.Sprintf("[%s] Downloading file: `%s`.", message.Document.FileID, fileUrl))
 	n, tempFilePath := DownloadToTempFile(fileUrl)
@@ -168,25 +140,18 @@ func main() {
 				reply = "Please, send me only documents.\n" +
 					"I'm quite busy for all that friendy-chats."
 			}
-			msg := tgbotapi.NewMessage(message.Chat.ID, reply)
-			msg.ReplyToMessageID = message.MessageID
-			Bot.Send(msg)
+			SendReply(message, reply)
 		} else {
 			if SupportedMimetypes[message.Document.MimeType] {
 				if message.Document.FileSize > (1024 * 1024 * 20) {
-					msg := tgbotapi.NewMessage(message.Chat.ID, "Sorry, I can't download that document, due to Telegram limits (bots can't download files larger than 20 MB)")
-					msg.ReplyToMessageID = message.MessageID
-					Bot.Send(msg)
+					SendReply(message, "Sorry, I can't download that document, due to Telegram limits (bots can't download files larger than 20 MB)")
 				} else {
 					fileUrl, _ := Bot.GetFileDirectURL(message.Document.FileID)
 					ProcessFile(fileUrl, message)
 				}
 			} else {
 				log.Println(fmt.Sprintf("[%s] Unknown mimetype: [%s]", message.Document.FileID, message.Document.MimeType))
-				reply := "Sorry, I don't support this file type."
-				msg := tgbotapi.NewMessage(message.Chat.ID, reply)
-				msg.ReplyToMessageID = message.MessageID
-				Bot.Send(msg)
+				SendReply(message, "Sorry, I don't support this file type.")
 			}
 		}
 	}
