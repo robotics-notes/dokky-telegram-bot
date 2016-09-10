@@ -7,7 +7,7 @@ First, follow install instructions for [go-libreofficekit](https://github.com/do
 
 ```bash
 $ apt-get install libmagic-dev
-$ go get -u github.com/docsbox/dokky-telegram-bot
+$ go get -u github.com/robotics-notes/dokky-telegram-bot
 ```
 
 # Usage
