@@ -96,7 +96,7 @@ func ProcessFile(fileUrl string, bot *tgbotapi.BotAPI, message *tgbotapi.Message
 	log.Println(fmt.Sprintf("[%s] Downloading file: `%s`.", message.Document.FileID, fileUrl))
 	n, tempFilePath := DownloadToTempFile(fileUrl)
 	log.Println(fmt.Sprintf("[%s] Saved as `%s`[%d].", message.Document.FileID, tempFilePath, n))
-	SendReply(bot, message, "Got it.\nIt may take a while, so please stand by.")
+	SendReply(bot, message, DocumentDownloadedReply)
 	defer os.Remove(tempFilePath)
 	if n == message.Document.FileSize {
 		Office.Mutex.Lock()
@@ -113,7 +113,7 @@ func ProcessFile(fileUrl string, bot *tgbotapi.BotAPI, message *tgbotapi.Message
 	} else {
 		log.Println(fmt.Sprintf("[%s] Corrupt file.", message.Document.FileID))
 	}
-	SendReply(bot, message, "Done.")
+	SendReply(bot, message, DoneReply)
 }
 
 func main() {
@@ -146,23 +146,22 @@ func main() {
 		if message.Document == nil {
 			var reply string
 			if message.Text == "/start" {
-				reply = "Hi!\nNow, select a document and send it to me."
+				reply = StartReply
 			} else {
-				reply = "Please, send me only documents.\n" +
-					"I'm quite busy for all that friendy-chats."
+				reply = NotDocumentReply
 			}
 			SendReply(bot, message, reply)
 		} else {
 			if SupportedMimetypes[message.Document.MimeType] {
 				if message.Document.FileSize > (1024 * 1024 * 20) {
-					SendReply(bot, message, "Sorry, I can't download that document, due to Telegram limits (bots can't download files larger than 20 MB)")
+					SendReply(bot, message, LargeFileReply)
 				} else {
 					fileUrl, _ := bot.GetFileDirectURL(message.Document.FileID)
 					go ProcessFile(fileUrl, bot, message)
 				}
 			} else {
 				log.Println(fmt.Sprintf("[%s] Unknown mimetype: [%s]", message.Document.FileID, message.Document.MimeType))
-				SendReply(bot, message, "Sorry, I don't support this file type.")
+				SendReply(bot, message, UnsupportedMimetypeReply)
 			}
 		}
 	}
