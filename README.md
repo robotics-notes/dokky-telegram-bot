@@ -6,12 +6,13 @@
 First, follow install instructions for [go-libreofficekit](https://github.com/docsbox/go-libreofficekit), then type this into your terminal:
 
 ```bash
-$ go get github.com/docsbox/dokky-telegram-bot
+$ apt-get install libmagic-dev
+$ go get -u github.com/docsbox/dokky-telegram-bot
 ```
 
 # Usage
 ```bash
-$ export TELEGRAM_BOT_TOKEN="your-bot-token-goes-here"
+$ export TELEGRAM_BOT_TOKEN="your-bot-token-here"
 $ $GOPATH/bin/dokky-telegram-bot
 # Will print something like this:
 # 2016/09/09 18:29:44 Started.
