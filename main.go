@@ -7,13 +7,11 @@ import (
 	"image"
 	"log"
 	"os"
-	"runtime"
 	"unsafe"
 )
 
 var (
-	OfficePoolSize     = runtime.NumCPU()
-	OfficePool         = make(chan *libreofficekit.Office, OfficePoolSize)
+	Office             *libreofficekit.Office
 	SupportedMimetypes = map[string]bool{
 		// Microsoft Office
 		"application/msword":                                                        true,
@@ -94,25 +92,23 @@ func ProcessDocument(document *libreofficekit.Document, bot *tgbotapi.BotAPI, me
 }
 
 func ProcessFile(fileUrl string, bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	SendReply(bot, message, "Got it.\nIt may take a while, so please stand by.")
 	log.Println(fmt.Sprintf("[%s] Received file from [%s]: ('%v', '%v', %v bytes).", message.Document.FileID, message.Chat.UserName, message.Document.FileName, message.Document.MimeType, message.Document.FileSize))
 	log.Println(fmt.Sprintf("[%s] Downloading file: `%s`.", message.Document.FileID, fileUrl))
 	n, tempFilePath := DownloadToTempFile(fileUrl)
 	log.Println(fmt.Sprintf("[%s] Saved as `%s`[%d].", message.Document.FileID, tempFilePath, n))
+	SendReply(bot, message, "Got it.\nIt may take a while, so please stand by.")
 	defer os.Remove(tempFilePath)
 	if n == message.Document.FileSize {
-		office := <-OfficePool
-		office.Mutex.Lock()
+		Office.Mutex.Lock()
 		log.Println(fmt.Sprintf("[%s] Locked LibreOfficeKit.", message.Document.FileID))
-		document, err := office.LoadDocument(tempFilePath)
+		document, err := Office.LoadDocument(tempFilePath)
 		log.Println(fmt.Sprintf("[%s] LibreOffice document type: [%d].", message.Document.FileID, document.GetType()))
 		defer document.Close()
 		if err == nil {
 			document.InitializeForRendering("")
 			ProcessDocument(document, bot, message)
 		}
-		office.Mutex.Unlock()
-		OfficePool <- office
+		Office.Mutex.Unlock()
 		log.Println(fmt.Sprintf("[%s] Unlocked LibreOfficeKit.", message.Document.FileID))
 	} else {
 		log.Println(fmt.Sprintf("[%s] Corrupt file.", message.Document.FileID))
@@ -123,16 +119,13 @@ func ProcessFile(fileUrl string, bot *tgbotapi.BotAPI, message *tgbotapi.Message
 func main() {
 	log.Println("Started.")
 
-	log.Println(fmt.Sprintf("LibreOfficeKit pool size: %d.", OfficePoolSize))
-	for i := 0; i < OfficePoolSize; i++ {
-		office, err := libreofficekit.NewOffice(LibreOfficePath)
-		if err != nil {
-			log.Panic(err)
-		} else {
-			OfficePool <- office
-			log.Println(fmt.Sprintf("Loaded LibreOfficeKit #%d.", i+1))
-		}
+	var err error
 
+	Office, err = libreofficekit.NewOffice(LibreOfficePath)
+	if err != nil {
+		log.Panic(err)
+	} else {
+		log.Println("Loaded LibreOfficeKit.")
 	}
 
 	bot, err := tgbotapi.NewBotAPI(os.Getenv("TELEGRAM_BOT_TOKEN"))
