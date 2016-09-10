@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/docsbox/go-libreofficekit"
+	"github.com/rakyll/magicmime"
 	"gopkg.in/telegram-bot-api.v4"
 	"image"
 	"log"
@@ -96,7 +97,14 @@ func ProcessFile(fileUrl string, bot *tgbotapi.BotAPI, message *tgbotapi.Message
 	log.Println(fmt.Sprintf("[%s] Downloading file: `%s`.", message.Document.FileID, fileUrl))
 	n, tempFilePath := DownloadToTempFile(fileUrl)
 	log.Println(fmt.Sprintf("[%s] Saved as `%s`[%d].", message.Document.FileID, tempFilePath, n))
-	SendReply(bot, message, DocumentDownloadedReply)
+	realMimetype, _ := magicmime.TypeByFile(tempFilePath)
+	log.Println(fmt.Sprintf("[%s] Libmagic mimetype: `%s`.", message.Document.FileID, realMimetype))
+	if !SupportedMimetypes[realMimetype] {
+		SendReply(bot, message, UnsupportedMimetypeReply)
+		return
+	} else {
+		SendReply(bot, message, DocumentDownloadedReply)
+	}
 	defer os.Remove(tempFilePath)
 	if n == message.Document.FileSize {
 		Office.Mutex.Lock()
@@ -127,6 +135,14 @@ func main() {
 	} else {
 		log.Println("Loaded LibreOfficeKit.")
 	}
+
+	err = magicmime.Open(magicmime.MAGIC_MIME_TYPE | magicmime.MAGIC_SYMLINK | magicmime.MAGIC_ERROR)
+	if err != nil {
+		log.Panic("Failed to load libmagic.")
+	} else {
+		log.Println("Loaded libmagic.")
+	}
+	defer magicmime.Close()
 
 	bot, err := tgbotapi.NewBotAPI(os.Getenv("TELEGRAM_BOT_TOKEN"))
 	if err != nil {
