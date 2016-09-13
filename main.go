@@ -12,6 +12,7 @@ import (
 )
 
 var (
+	TelegramBotToken   = os.Getenv("TELEGRAM_BOT_TOKEN")
 	Office             *libreofficekit.Office
 	SupportedMimetypes = map[string]bool{
 		// Microsoft Office
@@ -144,7 +145,7 @@ func main() {
 	}
 	defer magicmime.Close()
 
-	bot, err := tgbotapi.NewBotAPI(os.Getenv("TELEGRAM_BOT_TOKEN"))
+	bot, err := tgbotapi.NewBotAPI(TelegramBotToken)
 	if err != nil {
 		log.Panic(err)
 	}
