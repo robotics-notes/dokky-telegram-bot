@@ -170,7 +170,7 @@ func main() {
 			SendReply(bot, message, reply)
 		} else {
 			if SupportedMimetypes[message.Document.MimeType] {
-				if message.Document.FileSize > (1024 * 1024 * 20) {
+				if message.Document.FileSize > (DownloadFilesizeLimit) {
 					SendReply(bot, message, LargeFileReply)
 				} else {
 					fileUrl, _ := bot.GetFileDirectURL(message.Document.FileID)
